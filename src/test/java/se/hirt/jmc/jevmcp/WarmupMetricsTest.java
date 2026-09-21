@@ -13,6 +13,7 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 import org.openjdk.jmc.common.item.ItemCollectionToolkit;
+import org.openjdk.jmc.flightrecorder.jdk.JdkTypeIDs;
 
 import se.hirt.jmc.jevmcp.RecordingService.Recording;
 
@@ -35,6 +36,7 @@ class WarmupMetricsTest {
 		assertFalse(state.containsKey("recordingStartTime"));
 		assertFalse(state.containsKey("jvmUptimeAtRecordingStartSeconds"));
 		assertEquals(0L, state.get("classLoadCount"));
+		assertTrue(state.containsKey("eventAvailability"));
 	}
 
 	@Test
@@ -60,5 +62,8 @@ class WarmupMetricsTest {
 		assertTrue(((Number) state.get("classLoadCount")).longValue() > 1000);
 		assertTrue(state.containsKey("recordingStartTime"));
 		assertTrue(state.containsKey("jvmUptimeAtRecordingEndSeconds"));
+
+		assertTrue(metrics.eventAvailability.containsKey(JdkTypeIDs.VM_INFO));
+		assertTrue(metrics.eventAvailability.containsKey(JdkTypeIDs.CLASS_LOAD));
 	}
 }

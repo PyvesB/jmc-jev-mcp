@@ -29,16 +29,18 @@ final class WorkloadMetrics {
 	final double maxPauseMs;
 	final double allocationRateMbPerSec;
 	final Double avgCpuLoadPct;
+	final Map<String, String> eventAvailability;
 
 	private WorkloadMetrics(
 		double durationSeconds, long gcCount, double gcPauseOverheadPct, double maxPauseMs,
-		double allocationRateMbPerSec, Double avgCpuLoadPct) {
+		double allocationRateMbPerSec, Double avgCpuLoadPct, Map<String, String> eventAvailability) {
 		this.durationSeconds = durationSeconds;
 		this.gcCount = gcCount;
 		this.gcPauseOverheadPct = gcPauseOverheadPct;
 		this.maxPauseMs = maxPauseMs;
 		this.allocationRateMbPerSec = allocationRateMbPerSec;
 		this.avgCpuLoadPct = avgCpuLoadPct;
+		this.eventAvailability = eventAvailability;
 	}
 
 	static WorkloadMetrics compute(IItemCollection items, IQuantity start, IQuantity end) {
@@ -63,8 +65,11 @@ final class WorkloadMetrics {
 				: null;
 		Double avgCpuLoadPct = avgCpu != null ? avgCpu.doubleValueIn(UnitLookup.PERCENT) : null;
 
+		Map<String, String> eventAvailability = JfrToolkit.eventAvailability(items, JdkTypeIDs.GARBAGE_COLLECTION,
+				JdkTypeIDs.ALLOC_INSIDE_TLAB, JdkTypeIDs.ALLOC_OUTSIDE_TLAB, JdkTypeIDs.CPU_LOAD);
+
 		return new WorkloadMetrics(durationSeconds, gcCount, gcPauseOverheadPct, maxPauseMs, allocationRateMbPerSec,
-				avgCpuLoadPct);
+				avgCpuLoadPct, eventAvailability);
 	}
 
 	/**
@@ -80,6 +85,7 @@ final class WorkloadMetrics {
 		if (avgCpuLoadPct != null) {
 			map.put("avgCpuLoadPct", round(avgCpuLoadPct));
 		}
+		map.put("eventAvailability", eventAvailability);
 		return map;
 	}
 

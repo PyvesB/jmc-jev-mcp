@@ -32,6 +32,14 @@ public class JudgmentTools {
 
 	private static final String MODEL = "jev-latest";
 
+	/**
+	 * Appended to every classifyWorkloadProfile question so a metric that is zero because its
+	 * underlying event type was DISABLED is not mistaken for genuine evidence of "no".
+	 */
+	private static final String EVENT_AVAILABILITY_NOTE = "Check `metrics.eventAvailability` and "
+			+ "`warmup.eventAvailability`: a metric derived from an event type marked DISABLED or NONE there is "
+			+ "missing data, not evidence against this label, and should not move the answer either way.";
+
 	@Inject
 	RecordingService recordings;
 
@@ -148,18 +156,20 @@ public class JudgmentTools {
 			Map<String, Object> questions = new LinkedHashMap<>();
 			questions.put("throughputOriented", noulQuestion(
 					"Does this JVM workload look throughput oriented, i.e. optimized to maximize total work "
-							+ "done over time rather than to keep individual pauses short?"));
+							+ "done over time rather than to keep individual pauses short? "
+							+ EVENT_AVAILABILITY_NOTE));
 			questions.put("pauseTimeSensitive", noulQuestion(
 					"Does this JVM workload look pause-time sensitive, i.e. would it be significantly harmed "
-							+ "by long or frequent GC pauses?"));
+							+ "by long or frequent GC pauses? " + EVENT_AVAILABILITY_NOTE));
 			questions.put("memoryConstrained", noulQuestion(
 					"Does this JVM workload look memory constrained, i.e. running close to the limits of its "
-							+ "configured heap given its GC frequency and pause overhead?"));
+							+ "configured heap given its GC frequency and pause overhead? " + EVENT_AVAILABILITY_NOTE));
 			questions.put("allocationHeavy", noulQuestion(
 					"Does this JVM workload look allocation heavy, i.e. allocating objects at a high rate "
-							+ "relative to its GC activity?"));
+							+ "relative to its GC activity? " + EVENT_AVAILABILITY_NOTE));
 			questions.put("cpuBound", noulQuestion(
-					"Does this JVM workload look cpu bound, i.e. running at consistently high CPU load?"));
+					"Does this JVM workload look cpu bound, i.e. running at consistently high CPU load? "
+							+ EVENT_AVAILABILITY_NOTE));
 			questions.put("stillWarmingUp", noulQuestion(
 					"Does this recording capture a JVM/process that is still warming up, i.e. recently started "
 							+ "and not yet in steady state, rather than a JVM that has been running under stable "
@@ -170,7 +180,7 @@ public class JudgmentTools {
 							+ "recording began or ended) against `warmup.classLoadRatePerSecond` (elevated class "
 							+ "loading is typical during startup as classes are loaded on first use) and "
 							+ "`warmup.threadStartCount` (many new threads starting suggests subsystems are still "
-							+ "being initialized)."));
+							+ "being initialized). " + EVENT_AVAILABILITY_NOTE));
 
 			Map<String, Object> request = new LinkedHashMap<>();
 			request.put("state", state);

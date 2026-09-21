@@ -13,6 +13,7 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 import org.openjdk.jmc.common.item.ItemCollectionToolkit;
+import org.openjdk.jmc.flightrecorder.jdk.JdkTypeIDs;
 
 import se.hirt.jmc.jevmcp.RecordingService.Recording;
 
@@ -32,6 +33,7 @@ class WorkloadMetricsTest {
 		assertEquals(0.0, state.get("durationSeconds"));
 		assertEquals(0L, state.get("gcCount"));
 		assertFalse(state.containsKey("avgCpuLoadPct"));
+		assertTrue(state.containsKey("eventAvailability"));
 	}
 
 	@Test
@@ -50,5 +52,8 @@ class WorkloadMetricsTest {
 
 		Map<String, Object> state = metrics.toStateMap();
 		assertTrue(((Number) state.get("durationSeconds")).doubleValue() > 0);
+
+		assertTrue(metrics.eventAvailability.containsKey(JdkTypeIDs.GARBAGE_COLLECTION));
+		assertTrue(metrics.eventAvailability.containsKey(JdkTypeIDs.CPU_LOAD));
 	}
 }

@@ -37,11 +37,12 @@ final class WarmupMetrics {
 	final double classLoadRatePerSecond;
 	final long compilationEventCount;
 	final long threadStartCount;
+	final Map<String, String> eventAvailability;
 
 	private WarmupMetrics(
 		String recordingStartTime, String recordingEndTime, Double jvmUptimeAtRecordingStartSeconds,
 		Double jvmUptimeAtRecordingEndSeconds, long classLoadCount, double classLoadRatePerSecond,
-		long compilationEventCount, long threadStartCount) {
+		long compilationEventCount, long threadStartCount, Map<String, String> eventAvailability) {
 		this.recordingStartTime = recordingStartTime;
 		this.recordingEndTime = recordingEndTime;
 		this.jvmUptimeAtRecordingStartSeconds = jvmUptimeAtRecordingStartSeconds;
@@ -50,6 +51,7 @@ final class WarmupMetrics {
 		this.classLoadRatePerSecond = classLoadRatePerSecond;
 		this.compilationEventCount = compilationEventCount;
 		this.threadStartCount = threadStartCount;
+		this.eventAvailability = eventAvailability;
 	}
 
 	static WarmupMetrics compute(IItemCollection items, IQuantity start, IQuantity end) {
@@ -71,9 +73,12 @@ final class WarmupMetrics {
 		long compilationEventCount = countOf(items.apply(ItemFilters.type(JdkTypeIDs.COMPILATION)));
 		long threadStartCount = countOf(items.apply(ItemFilters.type(JdkTypeIDs.JAVA_THREAD_START)));
 
+		Map<String, String> eventAvailability = JfrToolkit.eventAvailability(items, JdkTypeIDs.VM_INFO,
+				JdkTypeIDs.CLASS_LOAD, JdkTypeIDs.COMPILATION, JdkTypeIDs.JAVA_THREAD_START);
+
 		return new WarmupMetrics(recordingStartTime, recordingEndTime, jvmUptimeAtRecordingStartSeconds,
 				jvmUptimeAtRecordingEndSeconds, classLoadCount, classLoadRatePerSecond, compilationEventCount,
-				threadStartCount);
+				threadStartCount, eventAvailability);
 	}
 
 	/**
@@ -97,6 +102,7 @@ final class WarmupMetrics {
 		map.put("classLoadRatePerSecond", round(classLoadRatePerSecond));
 		map.put("compilationEventCount", compilationEventCount);
 		map.put("threadStartCount", threadStartCount);
+		map.put("eventAvailability", eventAvailability);
 		return map;
 	}
 
