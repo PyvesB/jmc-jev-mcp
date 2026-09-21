@@ -161,13 +161,16 @@ public class JudgmentTools {
 			questions.put("cpuBound", noulQuestion(
 					"Does this JVM workload look cpu bound, i.e. running at consistently high CPU load?"));
 			questions.put("stillWarmingUp", noulQuestion(
-					"Does this recording capture a JVM that is still warming up, i.e. recently started and not "
-							+ "yet in steady state, rather than a JVM that has been running under stable load for "
-							+ "a while? Look at `warmup.jvmUptimeAtRecordingStartSeconds` (low or absent means the "
-							+ "JVM had barely started, or started before the recording, when it began), "
-							+ "`warmup.classLoadRatePerSecond` (elevated class loading is typical during startup "
-							+ "as classes are loaded on first use), and `warmup.threadStartCount` (many new "
-							+ "threads starting suggests subsystems are still being initialized)."));
+					"Does this recording capture a JVM/process that is still warming up, i.e. recently started "
+							+ "and not yet in steady state, rather than a JVM that has been running under stable "
+							+ "load for a while? Compare `warmup.jvmUptimeAtRecordingStartSeconds` and "
+							+ "`warmup.jvmUptimeAtRecordingEndSeconds` (the JVM's process uptime at the start and "
+							+ "end of the recording window - low values, or values close to `warmup.recordingStartTime`"
+							+ "/`warmup.recordingEndTime`'s own span, mean the JVM had barely started when this "
+							+ "recording began or ended) against `warmup.classLoadRatePerSecond` (elevated class "
+							+ "loading is typical during startup as classes are loaded on first use) and "
+							+ "`warmup.threadStartCount` (many new threads starting suggests subsystems are still "
+							+ "being initialized)."));
 
 			Map<String, Object> request = new LinkedHashMap<>();
 			request.put("state", state);

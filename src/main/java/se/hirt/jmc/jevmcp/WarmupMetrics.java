@@ -5,6 +5,7 @@
  */
 package se.hirt.jmc.jevmcp;
 
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -28,16 +29,23 @@ import org.openjdk.jmc.flightrecorder.jdk.JdkTypeIDs;
  */
 final class WarmupMetrics {
 
+	final String recordingStartTime;
+	final String recordingEndTime;
 	final Double jvmUptimeAtRecordingStartSeconds;
+	final Double jvmUptimeAtRecordingEndSeconds;
 	final long classLoadCount;
 	final double classLoadRatePerSecond;
 	final long compilationEventCount;
 	final long threadStartCount;
 
 	private WarmupMetrics(
-		Double jvmUptimeAtRecordingStartSeconds, long classLoadCount, double classLoadRatePerSecond,
+		String recordingStartTime, String recordingEndTime, Double jvmUptimeAtRecordingStartSeconds,
+		Double jvmUptimeAtRecordingEndSeconds, long classLoadCount, double classLoadRatePerSecond,
 		long compilationEventCount, long threadStartCount) {
+		this.recordingStartTime = recordingStartTime;
+		this.recordingEndTime = recordingEndTime;
 		this.jvmUptimeAtRecordingStartSeconds = jvmUptimeAtRecordingStartSeconds;
+		this.jvmUptimeAtRecordingEndSeconds = jvmUptimeAtRecordingEndSeconds;
 		this.classLoadCount = classLoadCount;
 		this.classLoadRatePerSecond = classLoadRatePerSecond;
 		this.compilationEventCount = compilationEventCount;
@@ -48,9 +56,14 @@ final class WarmupMetrics {
 		double durationSeconds = (start != null && end != null)
 				? end.subtract(start).doubleValueIn(UnitLookup.SECOND) : 0;
 
+		String recordingStartTime = toIsoInstant(start);
+		String recordingEndTime = toIsoInstant(end);
+
 		IQuantity jvmStartTime = firstValue(items, JdkTypeIDs.VM_INFO, JdkAttributes.JVM_START_TIME);
 		Double jvmUptimeAtRecordingStartSeconds = (jvmStartTime != null && start != null)
 				? start.subtract(jvmStartTime).doubleValueIn(UnitLookup.SECOND) : null;
+		Double jvmUptimeAtRecordingEndSeconds = (jvmStartTime != null && end != null)
+				? end.subtract(jvmStartTime).doubleValueIn(UnitLookup.SECOND) : null;
 
 		long classLoadCount = countOf(items.apply(ItemFilters.type(JdkTypeIDs.CLASS_LOAD)));
 		double classLoadRatePerSecond = durationSeconds > 0 ? classLoadCount / durationSeconds : 0;
@@ -58,8 +71,9 @@ final class WarmupMetrics {
 		long compilationEventCount = countOf(items.apply(ItemFilters.type(JdkTypeIDs.COMPILATION)));
 		long threadStartCount = countOf(items.apply(ItemFilters.type(JdkTypeIDs.JAVA_THREAD_START)));
 
-		return new WarmupMetrics(jvmUptimeAtRecordingStartSeconds, classLoadCount, classLoadRatePerSecond,
-				compilationEventCount, threadStartCount);
+		return new WarmupMetrics(recordingStartTime, recordingEndTime, jvmUptimeAtRecordingStartSeconds,
+				jvmUptimeAtRecordingEndSeconds, classLoadCount, classLoadRatePerSecond, compilationEventCount,
+				threadStartCount);
 	}
 
 	/**
@@ -67,14 +81,28 @@ final class WarmupMetrics {
 	 */
 	Map<String, Object> toStateMap() {
 		Map<String, Object> map = new LinkedHashMap<>();
+		if (recordingStartTime != null) {
+			map.put("recordingStartTime", recordingStartTime);
+		}
+		if (recordingEndTime != null) {
+			map.put("recordingEndTime", recordingEndTime);
+		}
 		if (jvmUptimeAtRecordingStartSeconds != null) {
 			map.put("jvmUptimeAtRecordingStartSeconds", round(jvmUptimeAtRecordingStartSeconds));
+		}
+		if (jvmUptimeAtRecordingEndSeconds != null) {
+			map.put("jvmUptimeAtRecordingEndSeconds", round(jvmUptimeAtRecordingEndSeconds));
 		}
 		map.put("classLoadCount", classLoadCount);
 		map.put("classLoadRatePerSecond", round(classLoadRatePerSecond));
 		map.put("compilationEventCount", compilationEventCount);
 		map.put("threadStartCount", threadStartCount);
 		return map;
+	}
+
+	private static String toIsoInstant(IQuantity timestamp) {
+		return timestamp != null ? Instant.ofEpochMilli((long) timestamp.doubleValueIn(UnitLookup.EPOCH_MS)).toString()
+				: null;
 	}
 
 	private static IQuantity firstValue(IItemCollection items, String typeId, IAttribute<IQuantity> attribute) {
