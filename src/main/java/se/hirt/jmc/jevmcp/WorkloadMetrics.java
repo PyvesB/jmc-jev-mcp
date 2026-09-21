@@ -65,7 +65,8 @@ final class WorkloadMetrics {
 		Double avgCpuLoadPct = avgCpu != null ? avgCpu.doubleValueIn(UnitLookup.PERCENT) : null;
 
 		Map<String, String> eventAvailability = JfrToolkit.eventAvailability(items, JdkTypeIDs.GARBAGE_COLLECTION,
-				JdkTypeIDs.ALLOC_INSIDE_TLAB, JdkTypeIDs.ALLOC_OUTSIDE_TLAB, JdkTypeIDs.CPU_LOAD);
+				JdkTypeIDs.ALLOC_INSIDE_TLAB, JdkTypeIDs.ALLOC_OUTSIDE_TLAB, JdkTypeIDs.CPU_LOAD,
+				JdkTypeIDs.EXECUTION_SAMPLE, JdkTypeIDs.OBJ_ALLOC_SAMPLE);
 
 		return new WorkloadMetrics(durationSeconds, gcCount, gcPauseOverheadPct, maxPauseMs, allocationRateMbPerSec,
 				avgCpuLoadPct, eventAvailability);

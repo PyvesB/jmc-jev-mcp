@@ -40,6 +40,17 @@ public class JudgmentTools {
 			+ "`warmup.eventAvailability`: a metric derived from an event type marked DISABLED or NONE there is "
 			+ "missing data, not evidence against this label, and should not move the answer either way.";
 
+	/**
+	 * Appended to a question whose corresponding hot-path state key may be absent (event type
+	 * disabled, or not present in this JDK version) rather than genuinely empty.
+	 */
+	private static final String HOT_PATH_NOTE = "`nodes` are the hottest frames (by self weight/count), `edges` "
+			+ "point from caller to callee; `cumulativeCount` is how often a frame appears anywhere in a sampled "
+			+ "call chain, not just as the leaf. This is a pruned graph (JMC's own entropy-based reduction), not "
+			+ "the full call tree, so treat concentration/spread of weight across nodes as the signal, not the "
+			+ "absolute node count. If this key is absent, that is missing data (event disabled or unsupported "
+			+ "on this JDK), not evidence against this label.";
+
 	@Inject
 	RecordingService recordings;
 
@@ -155,6 +166,14 @@ public class JudgmentTools {
 			Map<String, Object> state = new LinkedHashMap<>();
 			state.put("metrics", metrics.toStateMap());
 			state.put("warmup", warmup.toStateMap());
+			Map<String, Object> executionHotPath = HotPathMetrics.computeExecutionHotPath(recording.getItems());
+			if (executionHotPath != null) {
+				state.put("executionHotPath", executionHotPath);
+			}
+			Map<String, Object> allocationHotPath = HotPathMetrics.computeAllocationHotPath(recording.getItems());
+			if (allocationHotPath != null) {
+				state.put("allocationHotPath", allocationHotPath);
+			}
 
 			Map<String, Object> questions = new LinkedHashMap<>();
 			questions.put("throughputOriented",
@@ -171,9 +190,15 @@ public class JudgmentTools {
 							+ "configured heap given its GC frequency and pause overhead? " + EVENT_AVAILABILITY_NOTE));
 			questions.put("allocationHeavy",
 					noulQuestion("Does this JVM workload look allocation heavy, i.e. allocating objects at a high rate "
-							+ "relative to its GC activity? " + EVENT_AVAILABILITY_NOTE));
+							+ "relative to its GC activity? If present, `allocationHotPath` is the pruned call graph "
+							+ "for where allocations are coming from - a small number of dominant sites there "
+							+ "reinforces this label more than the same total rate spread evenly. " + HOT_PATH_NOTE
+							+ " " + EVENT_AVAILABILITY_NOTE));
 			questions.put("cpuBound",
 					noulQuestion("Does this JVM workload look cpu bound, i.e. running at consistently high CPU load? "
+							+ "If present, `executionHotPath` is the pruned call graph for where CPU time is spent - "
+							+ "use it to judge whether the load looks like real application work rather than, e.g., "
+							+ "GC or JIT compilation dominating the samples. " + HOT_PATH_NOTE + " "
 							+ EVENT_AVAILABILITY_NOTE));
 			questions.put("stillWarmingUp", noulQuestion(
 					"Does this recording capture a JVM/process that is still warming up, i.e. recently started "
