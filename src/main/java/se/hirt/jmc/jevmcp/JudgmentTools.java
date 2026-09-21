@@ -127,9 +127,10 @@ public class JudgmentTools {
 	}
 
 	@Tool(description = "Judges the workload profile of the recorded application - whether it looks throughput "
-			+ "oriented, pause-time sensitive, memory constrained, allocation heavy, and/or cpu bound - from GC, "
-			+ "allocation, and CPU metrics computed from the recording. These are not mutually exclusive: a "
-			+ "workload can be more than one at once. Requires the JEV_KEY environment variable to be set.")
+			+ "oriented, pause-time sensitive, memory constrained, allocation heavy, cpu bound, and/or still "
+			+ "warming up (JVM startup, not yet in steady state) - from GC, allocation, CPU, class loading and "
+			+ "compilation metrics computed from the recording. These are not mutually exclusive: a workload can "
+			+ "be more than one at once. Requires the JEV_KEY environment variable to be set.")
 	String classifyWorkloadProfile(
 		@ToolArg(description = "The recordingId from loadRecording. Leave empty when only one recording is loaded.", required = false) String recordingId) {
 		try {
@@ -137,9 +138,12 @@ public class JudgmentTools {
 			Recording recording = recordings.get(recordingId);
 			WorkloadMetrics metrics = WorkloadMetrics.compute(recording.getItems(), recording.getStart(),
 					recording.getEnd());
+			WarmupMetrics warmup = WarmupMetrics.compute(recording.getItems(), recording.getStart(),
+					recording.getEnd());
 
 			Map<String, Object> state = new LinkedHashMap<>();
 			state.put("metrics", metrics.toStateMap());
+			state.put("warmup", warmup.toStateMap());
 
 			Map<String, Object> questions = new LinkedHashMap<>();
 			questions.put("throughputOriented", noulQuestion(
@@ -156,6 +160,14 @@ public class JudgmentTools {
 							+ "relative to its GC activity?"));
 			questions.put("cpuBound", noulQuestion(
 					"Does this JVM workload look cpu bound, i.e. running at consistently high CPU load?"));
+			questions.put("stillWarmingUp", noulQuestion(
+					"Does this recording capture a JVM that is still warming up, i.e. recently started and not "
+							+ "yet in steady state, rather than a JVM that has been running under stable load for "
+							+ "a while? Look at `warmup.jvmUptimeAtRecordingStartSeconds` (low or absent means the "
+							+ "JVM had barely started, or started before the recording, when it began), "
+							+ "`warmup.classLoadRatePerSecond` (elevated class loading is typical during startup "
+							+ "as classes are loaded on first use), and `warmup.threadStartCount` (many new "
+							+ "threads starting suggests subsystems are still being initialized)."));
 
 			Map<String, Object> request = new LinkedHashMap<>();
 			request.put("state", state);
