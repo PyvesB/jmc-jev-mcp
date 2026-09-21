@@ -11,6 +11,7 @@ import java.util.Map;
 
 import io.quarkiverse.mcp.server.Tool;
 import io.quarkiverse.mcp.server.ToolArg;
+import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import org.eclipse.microprofile.rest.client.inject.RestClient;
@@ -26,6 +27,7 @@ import se.hirt.jmc.jevmcp.RuleAnalysisTools.TriggeredRule;
  * Jev is not agentic - it cannot call back into this server for more data - so every question here
  * assembles its full state up front and sends it in a single request.
  */
+@ApplicationScoped
 public class JudgmentTools {
 
 	private static final String MODEL = "jev-latest";
