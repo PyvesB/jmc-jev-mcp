@@ -44,8 +44,7 @@ class WarmupMetricsTest {
 		RecordingService service = new RecordingService();
 		Recording recording = service.load(TestRecordings.wldf().getAbsolutePath());
 
-		WarmupMetrics metrics = WarmupMetrics.compute(recording.getItems(), recording.getStart(),
-				recording.getEnd());
+		WarmupMetrics metrics = WarmupMetrics.compute(recording.getItems(), recording.getStart(), recording.getEnd());
 
 		// wldf.jfr is a real recording of a WebLogic server starting up, so it should show heavy
 		// class loading and thread startup activity, with the JVM's uptime still small throughout.

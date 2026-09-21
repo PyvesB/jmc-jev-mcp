@@ -31,9 +31,8 @@ final class WorkloadMetrics {
 	final Double avgCpuLoadPct;
 	final Map<String, String> eventAvailability;
 
-	private WorkloadMetrics(
-		double durationSeconds, long gcCount, double gcPauseOverheadPct, double maxPauseMs,
-		double allocationRateMbPerSec, Double avgCpuLoadPct, Map<String, String> eventAvailability) {
+	private WorkloadMetrics(double durationSeconds, long gcCount, double gcPauseOverheadPct, double maxPauseMs,
+			double allocationRateMbPerSec, Double avgCpuLoadPct, Map<String, String> eventAvailability) {
 		this.durationSeconds = durationSeconds;
 		this.gcCount = gcCount;
 		this.gcPauseOverheadPct = gcPauseOverheadPct;
@@ -44,8 +43,8 @@ final class WorkloadMetrics {
 	}
 
 	static WorkloadMetrics compute(IItemCollection items, IQuantity start, IQuantity end) {
-		double durationSeconds = (start != null && end != null)
-				? end.subtract(start).doubleValueIn(UnitLookup.SECOND) : 0;
+		double durationSeconds = (start != null && end != null) ? end.subtract(start).doubleValueIn(UnitLookup.SECOND)
+				: 0;
 
 		IItemCollection gcEvents = items.apply(ItemFilters.type(JdkTypeIDs.GARBAGE_COLLECTION));
 		long gcCount = countOf(gcEvents);

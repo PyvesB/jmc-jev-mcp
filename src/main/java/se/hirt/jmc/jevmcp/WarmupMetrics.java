@@ -24,8 +24,8 @@ import org.openjdk.jmc.flightrecorder.jdk.JdkTypeIDs;
 /**
  * A fixed set of metrics computed from a recording, used as the {@code state} for the "still
  * warming up" Jev question folded into classifyWorkloadProfile. A JVM that is still warming up
- * tends to start recently before (or during) the recording, load classes at a high rate, and
- * spin up threads as subsystems initialize.
+ * tends to start recently before (or during) the recording, load classes at a high rate, and spin
+ * up threads as subsystems initialize.
  */
 final class WarmupMetrics {
 
@@ -39,10 +39,9 @@ final class WarmupMetrics {
 	final long threadStartCount;
 	final Map<String, String> eventAvailability;
 
-	private WarmupMetrics(
-		String recordingStartTime, String recordingEndTime, Double jvmUptimeAtRecordingStartSeconds,
-		Double jvmUptimeAtRecordingEndSeconds, long classLoadCount, double classLoadRatePerSecond,
-		long compilationEventCount, long threadStartCount, Map<String, String> eventAvailability) {
+	private WarmupMetrics(String recordingStartTime, String recordingEndTime, Double jvmUptimeAtRecordingStartSeconds,
+			Double jvmUptimeAtRecordingEndSeconds, long classLoadCount, double classLoadRatePerSecond,
+			long compilationEventCount, long threadStartCount, Map<String, String> eventAvailability) {
 		this.recordingStartTime = recordingStartTime;
 		this.recordingEndTime = recordingEndTime;
 		this.jvmUptimeAtRecordingStartSeconds = jvmUptimeAtRecordingStartSeconds;
@@ -55,8 +54,8 @@ final class WarmupMetrics {
 	}
 
 	static WarmupMetrics compute(IItemCollection items, IQuantity start, IQuantity end) {
-		double durationSeconds = (start != null && end != null)
-				? end.subtract(start).doubleValueIn(UnitLookup.SECOND) : 0;
+		double durationSeconds = (start != null && end != null) ? end.subtract(start).doubleValueIn(UnitLookup.SECOND)
+				: 0;
 
 		String recordingStartTime = toIsoInstant(start);
 		String recordingEndTime = toIsoInstant(end);

@@ -100,7 +100,8 @@ public class RecordingService {
 
 	/**
 	 * Recordings are keyed by canonical path so that a client can refer to one by any spelling of
-	 * its path - relative, containing "..", or through a symlink - and still hit the same recording.
+	 * its path - relative, containing "..", or through a symlink - and still hit the same
+	 * recording.
 	 */
 	private static String canonicalize(String path) {
 		try {

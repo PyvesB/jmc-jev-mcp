@@ -77,12 +77,12 @@ public final class JfrToolkit {
 	}
 
 	/**
-	 * Reports, per event type, whether it was enabled/disabled in the recording (or has no events at
-	 * all for another reason) - so a metric computed as zero because its event type was disabled can
-	 * be told apart from a metric that is genuinely zero. Given directly to Jev alongside the metrics
-	 * it explains, since Jev has no way to inspect the recording itself.
+	 * Reports, per event type, whether it was enabled/disabled in the recording (or has no events
+	 * at all for another reason) - so a metric computed as zero because its event type was disabled
+	 * can be told apart from a metric that is genuinely zero. Given directly to Jev alongside the
+	 * metrics it explains, since Jev has no way to inspect the recording itself.
 	 */
-	public static Map<String, String> eventAvailability(IItemCollection items, String... typeIds) {
+	public static Map<String, String> eventAvailability(IItemCollection items, String ... typeIds) {
 		Map<String, String> availability = new LinkedHashMap<>();
 		for (String typeId : typeIds) {
 			availability.put(typeId, RulesToolkit.getEventAvailability(items, typeId).name());
