@@ -1,5 +1,12 @@
 # jmc-jev-mcp
 
+[![Build](https://github.com/thegreystone/jmc-jev-mcp/actions/workflows/build.yml/badge.svg)](https://github.com/thegreystone/jmc-jev-mcp/actions/workflows/build.yml)
+[![Release](https://img.shields.io/github/v/release/thegreystone/jmc-jev-mcp)](https://github.com/thegreystone/jmc-jev-mcp/releases/latest)
+[![Java 21+](https://img.shields.io/badge/Java-21%2B-blue)](https://adoptium.net/)
+[![Quarkus](https://img.shields.io/badge/Quarkus-3.38-blueviolet)](https://quarkus.io/)
+[![GraalVM Native](https://img.shields.io/badge/GraalVM-native--image-orange)](https://www.graalvm.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green)](https://opensource.org/licenses/MIT)
+
 An MCP server for JDK Flight Recorder (JFR) recordings that goes one step past listing findings:
 it uses [TypeSafe's Jev model](https://typesafe.ai) to judge them.
 
