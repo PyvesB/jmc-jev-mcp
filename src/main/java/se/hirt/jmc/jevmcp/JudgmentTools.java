@@ -154,7 +154,12 @@ public class JudgmentTools {
 			+ "be more than one at once. Requires the JEV_KEY environment variable to be set.")
 	String classifyWorkloadProfile(
 		@ToolArg(description = "The recordingId from loadRecording. Leave empty when only one recording is loaded.", required = false)
-		String recordingId) {
+		String recordingId,
+		@ToolArg(description = "Max nodes to keep in each pruned hot-path graph. Defaults to "
+				+ HotPathMetrics.DEFAULT_MAX_NODES + ", capped at " + HotPathMetrics.HARD_CAP_MAX_NODES
+				+ ". Lower it to shrink the request; raise it for a finer-grained graph on a recording with a "
+				+ "wide spread of hot frames.", required = false)
+		Integer maxHotPathNodes) {
 		try {
 			requireJevKey();
 			Recording recording = recordings.get(recordingId);
@@ -162,15 +167,18 @@ public class JudgmentTools {
 					recording.getEnd());
 			WarmupMetrics warmup = WarmupMetrics.compute(recording.getItems(), recording.getStart(),
 					recording.getEnd());
+			int maxNodes = HotPathMetrics.clampMaxNodes(maxHotPathNodes);
 
 			Map<String, Object> state = new LinkedHashMap<>();
 			state.put("metrics", metrics.toStateMap());
 			state.put("warmup", warmup.toStateMap());
-			Map<String, Object> executionHotPath = HotPathMetrics.computeExecutionHotPath(recording.getItems());
+			Map<String, Object> executionHotPath = HotPathMetrics.computeExecutionHotPath(recording.getItems(),
+					maxNodes);
 			if (executionHotPath != null) {
 				state.put("executionHotPath", executionHotPath);
 			}
-			Map<String, Object> allocationHotPath = HotPathMetrics.computeAllocationHotPath(recording.getItems());
+			Map<String, Object> allocationHotPath = HotPathMetrics.computeAllocationHotPath(recording.getItems(),
+					maxNodes);
 			if (allocationHotPath != null) {
 				state.put("allocationHotPath", allocationHotPath);
 			}

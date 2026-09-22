@@ -21,8 +21,20 @@ class HotPathMetricsTest {
 
 	@Test
 	void emptyRecordingYieldsNoHotPaths() {
-		assertNull(HotPathMetrics.computeExecutionHotPath(ItemCollectionToolkit.EMPTY));
-		assertNull(HotPathMetrics.computeAllocationHotPath(ItemCollectionToolkit.EMPTY));
+		assertNull(
+				HotPathMetrics.computeExecutionHotPath(ItemCollectionToolkit.EMPTY, HotPathMetrics.DEFAULT_MAX_NODES));
+		assertNull(
+				HotPathMetrics.computeAllocationHotPath(ItemCollectionToolkit.EMPTY, HotPathMetrics.DEFAULT_MAX_NODES));
+	}
+
+	@Test
+	void clampMaxNodesFallsBackAndCaps() {
+		assertTrue(HotPathMetrics.clampMaxNodes(null) == HotPathMetrics.DEFAULT_MAX_NODES);
+		assertTrue(HotPathMetrics.clampMaxNodes(0) == HotPathMetrics.DEFAULT_MAX_NODES);
+		assertTrue(HotPathMetrics.clampMaxNodes(-5) == HotPathMetrics.DEFAULT_MAX_NODES);
+		assertTrue(HotPathMetrics.clampMaxNodes(10) == 10);
+		assertTrue(HotPathMetrics
+				.clampMaxNodes(HotPathMetrics.HARD_CAP_MAX_NODES + 1000) == HotPathMetrics.HARD_CAP_MAX_NODES);
 	}
 
 	@Test
@@ -30,8 +42,10 @@ class HotPathMetricsTest {
 		RecordingService service = new RecordingService();
 		Recording recording = service.load(TestRecordings.wldf().getAbsolutePath());
 
-		Map<String, Object> executionHotPath = HotPathMetrics.computeExecutionHotPath(recording.getItems());
-		Map<String, Object> allocationHotPath = HotPathMetrics.computeAllocationHotPath(recording.getItems());
+		Map<String, Object> executionHotPath = HotPathMetrics.computeExecutionHotPath(recording.getItems(),
+				HotPathMetrics.DEFAULT_MAX_NODES);
+		Map<String, Object> allocationHotPath = HotPathMetrics.computeAllocationHotPath(recording.getItems(),
+				HotPathMetrics.DEFAULT_MAX_NODES);
 
 		// wldf.jfr carries both execution and allocation samples.
 		assertNotNull(executionHotPath);
@@ -62,5 +76,17 @@ class HotPathMetricsTest {
 				assertTrue(edge.containsKey("value"));
 			}
 		}
+	}
+
+	@Test
+	void customMaxNodesIsHonored() throws Exception {
+		RecordingService service = new RecordingService();
+		Recording recording = service.load(TestRecordings.wldf().getAbsolutePath());
+
+		Map<String, Object> executionHotPath = HotPathMetrics.computeExecutionHotPath(recording.getItems(), 10);
+
+		@SuppressWarnings("unchecked")
+		List<Map<String, Object>> nodes = (List<Map<String, Object>>) executionHotPath.get("nodes");
+		assertTrue(nodes.size() <= 10, "expected at most 10 nodes, got " + nodes.size());
 	}
 }

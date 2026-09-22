@@ -51,7 +51,7 @@ class JudgmentToolsTest {
 	@Test
 	void classifyWorkloadProfileFailsFastWithoutJevKey() {
 		withoutJevKey(() -> {
-			String result = judgmentTools.classifyWorkloadProfile("");
+			String result = judgmentTools.classifyWorkloadProfile("", null);
 			assertTrue(result.startsWith("Error:"));
 			assertTrue(result.contains("JEV_KEY"));
 		});

@@ -32,29 +32,40 @@ import org.openjdk.jmc.flightrecorder.stacktrace.graph.StacktraceGraphModel;
  */
 final class HotPathMetrics {
 
-	private static final int MAX_NODES = 80;
+	static final int DEFAULT_MAX_NODES = 80;
+	static final int HARD_CAP_MAX_NODES = 500;
 
 	private HotPathMetrics() {
 	}
 
-	static Map<String, Object> computeExecutionHotPath(IItemCollection items) {
+	static Map<String, Object> computeExecutionHotPath(IItemCollection items, int maxNodes) {
 		IItemCollection filtered = items.apply(ItemFilters.type(JdkTypeIDs.EXECUTION_SAMPLE));
-		return compute(filtered, null, JdkTypeIDs.EXECUTION_SAMPLE);
+		return compute(filtered, null, JdkTypeIDs.EXECUTION_SAMPLE, maxNodes);
 	}
 
-	static Map<String, Object> computeAllocationHotPath(IItemCollection items) {
+	static Map<String, Object> computeAllocationHotPath(IItemCollection items, int maxNodes) {
 		IItemCollection sampled = items.apply(ItemFilters.type(JdkTypeIDs.OBJ_ALLOC_SAMPLE));
 		if (sampled.hasItems()) {
-			return compute(sampled, JdkAttributes.SAMPLE_WEIGHT, JdkTypeIDs.OBJ_ALLOC_SAMPLE);
+			return compute(sampled, JdkAttributes.SAMPLE_WEIGHT, JdkTypeIDs.OBJ_ALLOC_SAMPLE, maxNodes);
 		}
 		IItemCollection tlab = items
 				.apply(ItemFilters.type(JdkTypeIDs.ALLOC_INSIDE_TLAB, JdkTypeIDs.ALLOC_OUTSIDE_TLAB));
 		return compute(tlab, JdkAttributes.ALLOCATION_SIZE,
-				JdkTypeIDs.ALLOC_INSIDE_TLAB + "/" + JdkTypeIDs.ALLOC_OUTSIDE_TLAB);
+				JdkTypeIDs.ALLOC_INSIDE_TLAB + "/" + JdkTypeIDs.ALLOC_OUTSIDE_TLAB, maxNodes);
+	}
+
+	/**
+	 * Clamps a caller-supplied node budget the same way the other tools clamp their limits: a
+	 * missing or non-positive value falls back to {@link #DEFAULT_MAX_NODES}, and anything above
+	 * {@link #HARD_CAP_MAX_NODES} is capped, to keep a single request's state bounded.
+	 */
+	static int clampMaxNodes(Integer requested) {
+		int value = requested == null || requested <= 0 ? DEFAULT_MAX_NODES : requested;
+		return Math.min(value, HARD_CAP_MAX_NODES);
 	}
 
 	private static Map<String, Object> compute(
-		IItemCollection filtered, IAttribute<IQuantity> weightAttribute, String eventTypeLabel) {
+		IItemCollection filtered, IAttribute<IQuantity> weightAttribute, String eventTypeLabel, int maxNodes) {
 		if (!filtered.hasItems()) {
 			return null;
 		}
@@ -63,7 +74,7 @@ final class HotPathMetrics {
 		if (model.isEmpty()) {
 			return null;
 		}
-		StacktraceGraphModel pruned = Pruning.prune(model, MAX_NODES, true);
+		StacktraceGraphModel pruned = Pruning.prune(model, maxNodes, true);
 
 		List<Map<String, Object>> nodes = new ArrayList<>();
 		for (Node node : pruned.getNodes()) {

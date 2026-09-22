@@ -38,7 +38,7 @@ class JudgmentToolsLiveTest {
 	@Test
 	void classifyWorkloadProfileCallsJevWhenKeyIsPresent() throws Exception {
 		recordings.load(TestRecordings.wldf().getAbsolutePath());
-		String result = judgmentTools.classifyWorkloadProfile("");
+		String result = judgmentTools.classifyWorkloadProfile("", null);
 		assertFalse(result.startsWith("Error:"), result);
 		for (String label : new String[] {"throughputOriented", "pauseTimeSensitive", "memoryConstrained",
 				"allocationHeavy", "cpuBound", "stillWarmingUp"}) {
