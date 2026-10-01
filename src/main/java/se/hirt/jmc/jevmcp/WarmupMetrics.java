@@ -10,11 +10,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import org.openjdk.jmc.common.item.Aggregators;
-import org.openjdk.jmc.common.item.IAttribute;
-import org.openjdk.jmc.common.item.IItem;
 import org.openjdk.jmc.common.item.IItemCollection;
-import org.openjdk.jmc.common.item.IItemIterable;
-import org.openjdk.jmc.common.item.IMemberAccessor;
 import org.openjdk.jmc.common.item.ItemFilters;
 import org.openjdk.jmc.common.unit.IQuantity;
 import org.openjdk.jmc.common.unit.UnitLookup;
@@ -60,7 +56,7 @@ final class WarmupMetrics {
 		String recordingStartTime = toIsoInstant(start);
 		String recordingEndTime = toIsoInstant(end);
 
-		IQuantity jvmStartTime = firstValue(items, JdkTypeIDs.VM_INFO, JdkAttributes.JVM_START_TIME);
+		IQuantity jvmStartTime = JfrToolkit.firstValue(items, JdkTypeIDs.VM_INFO, JdkAttributes.JVM_START_TIME);
 		Double jvmUptimeAtRecordingStartSeconds = (jvmStartTime != null && start != null)
 				? start.subtract(jvmStartTime).doubleValueIn(UnitLookup.SECOND) : null;
 		Double jvmUptimeAtRecordingEndSeconds = (jvmStartTime != null && end != null)
@@ -108,22 +104,6 @@ final class WarmupMetrics {
 	private static String toIsoInstant(IQuantity timestamp) {
 		return timestamp != null ? Instant.ofEpochMilli((long) timestamp.doubleValueIn(UnitLookup.EPOCH_MS)).toString()
 				: null;
-	}
-
-	private static IQuantity firstValue(IItemCollection items, String typeId, IAttribute<IQuantity> attribute) {
-		for (IItemIterable iterable : items.apply(ItemFilters.type(typeId))) {
-			IMemberAccessor<IQuantity, IItem> accessor = attribute.getAccessor(iterable.getType());
-			if (accessor == null) {
-				continue;
-			}
-			for (IItem item : iterable) {
-				IQuantity value = accessor.getMember(item);
-				if (value != null) {
-					return value;
-				}
-			}
-		}
-		return null;
 	}
 
 	private static long countOf(IItemCollection items) {

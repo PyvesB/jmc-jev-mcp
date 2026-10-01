@@ -13,6 +13,7 @@ import org.openjdk.jmc.common.item.IItemCollection;
 import org.openjdk.jmc.common.item.ItemFilters;
 import org.openjdk.jmc.common.unit.IQuantity;
 import org.openjdk.jmc.common.unit.UnitLookup;
+import org.openjdk.jmc.flightrecorder.jdk.JdkAggregators;
 import org.openjdk.jmc.flightrecorder.jdk.JdkAttributes;
 import org.openjdk.jmc.flightrecorder.jdk.JdkTypeIDs;
 
@@ -52,10 +53,7 @@ final class WorkloadMetrics {
 		double maxPauseMs = quantityToMillis(gcEvents.getAggregate(Aggregators.max(JdkAttributes.GC_LONGEST_PAUSE)));
 		double gcPauseOverheadPct = durationSeconds > 0 ? (totalPauseMs / 1000.0) / durationSeconds * 100.0 : 0;
 
-		IItemCollection allocEvents = items
-				.apply(ItemFilters.type(JdkTypeIDs.ALLOC_INSIDE_TLAB, JdkTypeIDs.ALLOC_OUTSIDE_TLAB));
-		double totalAllocatedBytes = quantityToBytes(
-				allocEvents.getAggregate(Aggregators.sum(JdkAttributes.ALLOCATION_SIZE)));
+		double totalAllocatedBytes = totalAllocatedBytes(items);
 		double allocationRateMbPerSec = durationSeconds > 0
 				? (totalAllocatedBytes / (1024.0 * 1024.0)) / durationSeconds : 0;
 
@@ -87,6 +85,20 @@ final class WorkloadMetrics {
 		}
 		map.put("eventAvailability", eventAvailability);
 		return map;
+	}
+
+	/**
+	 * Prefers ObjectAllocationSample, the only allocation event enabled in the JDK's default and
+	 * profile settings since JDK 16, and falls back to the TLAB events on older recordings. Each
+	 * in-TLAB event stands for its whole TLAB, which is why JMC's total uses the TLAB size there
+	 * rather than the size of the object that triggered it.
+	 */
+	static double totalAllocatedBytes(IItemCollection items) {
+		IItemCollection sampled = items.apply(ItemFilters.type(JdkTypeIDs.OBJ_ALLOC_SAMPLE));
+		if (sampled.hasItems()) {
+			return quantityToBytes(sampled.getAggregate(JdkAggregators.OBJ_ALLOC_TOTAL_SUM));
+		}
+		return quantityToBytes(items.getAggregate(JdkAggregators.ALLOCATION_TOTAL));
 	}
 
 	private static long countOf(IItemCollection items) {

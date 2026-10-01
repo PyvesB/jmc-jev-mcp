@@ -9,10 +9,12 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import org.openjdk.jmc.common.IDisplayable;
+import org.openjdk.jmc.common.item.IAttribute;
 import org.openjdk.jmc.common.item.IItem;
 import org.openjdk.jmc.common.item.IItemCollection;
 import org.openjdk.jmc.common.item.IItemIterable;
 import org.openjdk.jmc.common.item.IMemberAccessor;
+import org.openjdk.jmc.common.item.ItemFilters;
 import org.openjdk.jmc.common.unit.IQuantity;
 import org.openjdk.jmc.flightrecorder.JfrAttributes;
 import org.openjdk.jmc.flightrecorder.rules.util.RulesToolkit;
@@ -61,6 +63,26 @@ public final class JfrToolkit {
 			}
 		}
 		return latest;
+	}
+
+	/**
+	 * The first non-null value of an attribute across all events of a type, typically used for
+	 * configuration events that are only emitted once per chunk.
+	 */
+	public static <T> T firstValue(IItemCollection items, String typeId, IAttribute<T> attribute) {
+		for (IItemIterable iterable : items.apply(ItemFilters.type(typeId))) {
+			IMemberAccessor<T, IItem> accessor = attribute.getAccessor(iterable.getType());
+			if (accessor == null) {
+				continue;
+			}
+			for (IItem item : iterable) {
+				T value = accessor.getMember(item);
+				if (value != null) {
+					return value;
+				}
+			}
+		}
+		return null;
 	}
 
 	public static String formatQuantity(IQuantity value) {

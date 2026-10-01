@@ -7,9 +7,14 @@ package se.hirt.jmc.jevmcp;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.List;
+import java.util.Map;
+
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import se.hirt.jmc.jevmcp.RecordingService.Recording;
 
@@ -55,6 +60,21 @@ class JudgmentToolsTest {
 			assertTrue(result.startsWith("Error:"));
 			assertTrue(result.contains("JEV_KEY"));
 		});
+	}
+
+	@Test
+	void workloadStateIsSerializableAndBounded() throws Exception {
+		WorkloadMetrics metrics = WorkloadMetrics.compute(recording.getItems(), recording.getStart(),
+				recording.getEnd());
+		Map<String, Object> state = JudgmentTools.workloadState(recording, metrics, HotPathMetrics.DEFAULT_MAX_NODES);
+
+		for (String key : List.of("metrics", "warmup", "environment", "timeSeries", "executionHotPath",
+				"allocationHotPath", "monitorEnterHotPath", "durationHistograms", "lockContention")) {
+			assertTrue(state.containsKey(key), "missing " + key + " in " + state.keySet());
+		}
+		// Everything goes to Jev in a single request, so keep an eye on its size.
+		int size = new ObjectMapper().writeValueAsString(state).length();
+		assertTrue(size < 100_000, "workload state grew to " + size + " bytes");
 	}
 
 	/**

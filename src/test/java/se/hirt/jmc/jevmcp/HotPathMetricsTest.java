@@ -5,6 +5,7 @@
  */
 package se.hirt.jmc.jevmcp;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -76,6 +77,42 @@ class HotPathMetricsTest {
 				assertTrue(edge.containsKey("value"));
 			}
 		}
+	}
+
+	@Test
+	void monitorEnterHotPathIsWeightedByBlockedMilliseconds() throws Exception {
+		Recording recording = new RecordingService().load(TestRecordings.wldf().getAbsolutePath());
+		Map<String, Object> hotPath = HotPathMetrics.computeMonitorEnterHotPath(recording.getItems(),
+				HotPathMetrics.DEFAULT_MAX_NODES);
+
+		// Every recorded enter is at least as long as the recording's 20 ms threshold, so a frame's
+		// weight falling back to its event count would show up as less than 20 ms per event.
+		@SuppressWarnings("unchecked")
+		List<Map<String, Object>> nodes = (List<Map<String, Object>>) hotPath.get("nodes");
+		boolean anyWeighted = false;
+		for (Map<String, Object> node : nodes) {
+			long count = ((Number) node.get("selfCount")).longValue();
+			double weight = ((Number) node.get("selfWeight")).doubleValue();
+			assertTrue(weight >= 20 * count, node.toString());
+			anyWeighted |= count > 0;
+		}
+		assertTrue(anyWeighted);
+	}
+
+	@Test
+	void tlabFallbackIsWeightedByTlabSize() throws Exception {
+		Recording recording = new RecordingService().load(TestRecordings.wldf().getAbsolutePath());
+		Map<String, Object> hotPath = HotPathMetrics.computeAllocationHotPath(recording.getItems(),
+				HotPathMetrics.DEFAULT_MAX_NODES);
+
+		// wldf.jfr predates ObjectAllocationSample, so this is the TLAB fallback. Each in-TLAB event
+		// stands for a whole TLAB, so weights must be in bytes, far above one per event.
+		assertEquals("jdk.ObjectAllocationInNewTLAB/jdk.ObjectAllocationOutsideTLAB", hotPath.get("eventType"));
+		@SuppressWarnings("unchecked")
+		List<Map<String, Object>> nodes = (List<Map<String, Object>>) hotPath.get("nodes");
+		double weight = nodes.stream().mapToDouble(n -> ((Number) n.get("selfWeight")).doubleValue()).sum();
+		long count = nodes.stream().mapToLong(n -> ((Number) n.get("selfCount")).longValue()).sum();
+		assertTrue(weight > 1024.0 * count, weight + " bytes for " + count + " events");
 	}
 
 	@Test

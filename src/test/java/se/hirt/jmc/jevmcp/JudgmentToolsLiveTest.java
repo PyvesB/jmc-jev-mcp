@@ -41,7 +41,7 @@ class JudgmentToolsLiveTest {
 		String result = judgmentTools.classifyWorkloadProfile("", null);
 		assertFalse(result.startsWith("Error:"), result);
 		for (String label : new String[] {"throughputOriented", "pauseTimeSensitive", "memoryConstrained",
-				"allocationHeavy", "cpuBound", "stillWarmingUp"}) {
+				"allocationHeavy", "cpuBound", "lockContended", "stillWarmingUp"}) {
 			assertTrue(result.contains(label), "Missing " + label + " in:\n" + result);
 		}
 	}

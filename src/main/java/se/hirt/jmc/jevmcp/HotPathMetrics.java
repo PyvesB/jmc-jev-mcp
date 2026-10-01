@@ -10,10 +10,22 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.openjdk.jmc.common.IDescribable;
+import org.openjdk.jmc.common.item.Attribute;
+import org.openjdk.jmc.common.item.IAccessorKey;
 import org.openjdk.jmc.common.item.IAttribute;
+import org.openjdk.jmc.common.item.ICanonicalAccessorFactory;
+import org.openjdk.jmc.common.item.IItem;
 import org.openjdk.jmc.common.item.IItemCollection;
+import org.openjdk.jmc.common.item.IItemIterable;
+import org.openjdk.jmc.common.item.IMemberAccessor;
+import org.openjdk.jmc.common.item.IType;
+import org.openjdk.jmc.common.item.ItemCollectionToolkit;
 import org.openjdk.jmc.common.item.ItemFilters;
+import org.openjdk.jmc.common.item.ItemIterableToolkit;
 import org.openjdk.jmc.common.unit.IQuantity;
+import org.openjdk.jmc.common.unit.UnitLookup;
+import org.openjdk.jmc.flightrecorder.JfrAttributes;
 import org.openjdk.jmc.flightrecorder.jdk.JdkAttributes;
 import org.openjdk.jmc.flightrecorder.jdk.JdkTypeIDs;
 import org.openjdk.jmc.flightrecorder.stacktrace.FrameSeparator;
@@ -35,6 +47,23 @@ final class HotPathMetrics {
 	static final int DEFAULT_MAX_NODES = 80;
 	static final int HARD_CAP_MAX_NODES = 500;
 
+	/**
+	 * The graph model sums the raw double value of its weight attribute, so durations are converted
+	 * to a plain millisecond number first rather than left in whatever unit the parser produced.
+	 */
+	private static final IAttribute<IQuantity> DURATION_MS = new Attribute<IQuantity>("(durationMs)", "Duration (ms)",
+			null, UnitLookup.NUMBER) {
+		@Override
+		public <U> IMemberAccessor<IQuantity, U> customAccessor(IType<U> type) {
+			IMemberAccessor<IQuantity, U> accessor = JfrAttributes.DURATION.getAccessor(type);
+			return accessor == null ? null : item -> {
+				IQuantity duration = accessor.getMember(item);
+				return duration == null ? null
+						: UnitLookup.NUMBER_UNITY.quantity(duration.doubleValueIn(UnitLookup.MILLISECOND));
+			};
+		}
+	};
+
 	private HotPathMetrics() {
 	}
 
@@ -50,8 +79,17 @@ final class HotPathMetrics {
 		}
 		IItemCollection tlab = items
 				.apply(ItemFilters.type(JdkTypeIDs.ALLOC_INSIDE_TLAB, JdkTypeIDs.ALLOC_OUTSIDE_TLAB));
-		return compute(tlab, JdkAttributes.ALLOCATION_SIZE,
+		return compute(tlab, JdkAttributes.TOTAL_ALLOCATION_SIZE,
 				JdkTypeIDs.ALLOC_INSIDE_TLAB + "/" + JdkTypeIDs.ALLOC_OUTSIDE_TLAB, maxNodes);
+	}
+
+	/**
+	 * Weighted by how long threads were blocked rather than by how many events there were, since a
+	 * single long enter matters more than many enters just over the recording threshold.
+	 */
+	static Map<String, Object> computeMonitorEnterHotPath(IItemCollection items, int maxNodes) {
+		IItemCollection filtered = items.apply(ItemFilters.type(JdkTypeIDs.MONITOR_ENTER));
+		return compute(filtered, DURATION_MS, JdkTypeIDs.MONITOR_ENTER, maxNodes);
 	}
 
 	/**
@@ -70,7 +108,8 @@ final class HotPathMetrics {
 			return null;
 		}
 		FrameSeparator separator = new FrameSeparator(FrameCategorization.METHOD, false);
-		StacktraceGraphModel model = new StacktraceGraphModel(separator, filtered, weightAttribute);
+		StacktraceGraphModel model = new StacktraceGraphModel(separator,
+				weightAttribute != null ? withWeight(filtered, weightAttribute) : filtered, weightAttribute);
 		if (model.isEmpty()) {
 			return null;
 		}
@@ -104,6 +143,78 @@ final class HotPathMetrics {
 		summary.put("nodes", nodes);
 		summary.put("edges", edges);
 		return summary;
+	}
+
+	/**
+	 * StacktraceGraphModel looks its weight up directly on the event type by key, so a derived
+	 * attribute such as {@link JdkAttributes#TOTAL_ALLOCATION_SIZE} or {@link #DURATION_MS} would
+	 * silently fall back to a weight of 1 per event. Re-exposes the weight under its own key on a
+	 * delegating type, and turns a missing value into 0, which the model does not guard against.
+	 */
+	private static IItemCollection withWeight(IItemCollection items, IAttribute<IQuantity> weight) {
+		List<IItemIterable> weighted = new ArrayList<>();
+		for (IItemIterable iterable : items) {
+			IMemberAccessor<IQuantity, IItem> accessor = weight.getAccessor(iterable.getType());
+			if (accessor != null) {
+				weighted.add(ItemIterableToolkit.build(iterable::stream,
+						new WeightedType(iterable.getType(), weight.getKey(), accessor)));
+			}
+		}
+		return ItemCollectionToolkit.build(weighted::stream);
+	}
+
+	private static final class WeightedType implements IType<IItem> {
+		private static final IQuantity ZERO = UnitLookup.NUMBER_UNITY.quantity(0);
+
+		private final IType<IItem> delegate;
+		private final IAccessorKey<IQuantity> weightKey;
+		private final IMemberAccessor<IQuantity, IItem> weightAccessor;
+
+		WeightedType(IType<IItem> delegate, IAccessorKey<IQuantity> weightKey,
+				IMemberAccessor<IQuantity, IItem> accessor) {
+			this.delegate = delegate;
+			this.weightKey = weightKey;
+			this.weightAccessor = item -> {
+				IQuantity value = accessor.getMember(item);
+				return value != null ? value : ZERO;
+			};
+		}
+
+		@SuppressWarnings("unchecked")
+		@Override
+		public <M> IMemberAccessor<M, IItem> getAccessor(IAccessorKey<M> key) {
+			return weightKey.equals(key) ? (IMemberAccessor<M, IItem>) weightAccessor : delegate.getAccessor(key);
+		}
+
+		@Override
+		public List<IAttribute<?>> getAttributes() {
+			return delegate.getAttributes();
+		}
+
+		@Override
+		public Map<IAccessorKey<?>, ? extends IDescribable> getAccessorKeys() {
+			return delegate.getAccessorKeys();
+		}
+
+		@Override
+		public boolean hasAttribute(ICanonicalAccessorFactory<?> attribute) {
+			return delegate.hasAttribute(attribute);
+		}
+
+		@Override
+		public String getIdentifier() {
+			return delegate.getIdentifier();
+		}
+
+		@Override
+		public String getName() {
+			return delegate.getName();
+		}
+
+		@Override
+		public String getDescription() {
+			return delegate.getDescription();
+		}
 	}
 
 	private static String describeFrame(AggregatableFrame frame) {

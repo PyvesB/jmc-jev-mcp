@@ -19,6 +19,7 @@
 		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
 		<jmc.core.version>9.1.0</jmc.core.version>
+		<hdrhistogram.version>2.2.2</hdrhistogram.version>
 		<quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
 		<quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
 		<quarkus.platform.version>3.38.0</quarkus.platform.version>
@@ -82,6 +83,12 @@
 			<artifactId>flightrecorder.rules.jdk</artifactId>
 			<version>${jmc.core.version}</version>
 			<scope>runtime</scope>
+		</dependency>
+		<!-- Same duration histogram JMC's own percentile tables use. -->
+		<dependency>
+			<groupId>org.hdrhistogram</groupId>
+			<artifactId>HdrHistogram</artifactId>
+			<version>${hdrhistogram.version}</version>
 		</dependency>
 
 		<dependency>

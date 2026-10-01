@@ -15,6 +15,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import org.eclipse.microprofile.rest.client.inject.RestClient;
+import org.openjdk.jmc.common.item.IItemCollection;
 import org.openjdk.jmc.common.unit.IQuantity;
 import org.openjdk.jmc.common.unit.UnitLookup;
 import org.openjdk.jmc.flightrecorder.rules.Severity;
@@ -50,6 +51,26 @@ public class JudgmentTools {
 			+ "the full call tree, so treat concentration/spread of weight across nodes as the signal, not the "
 			+ "absolute node count. If this key is absent, that is missing data (event disabled or unsupported "
 			+ "on this JDK), not evidence against this label.";
+
+	/**
+	 * Appended to a question that uses {@code durationHistograms}, since JFR's recording threshold
+	 * censors the low end of the distribution.
+	 */
+	private static final String HISTOGRAM_NOTE = "Histogram `buckets` are log-scale duration ranges in "
+			+ "milliseconds (`fromMs` inclusive, `toMs` exclusive, the last bucket may be open ended). Each of "
+			+ "the `percentiles` carries `countAtOrAbove`, the number of events at or above it - a high p99.9 "
+			+ "backed by one or two events is an outlier, not a pattern. Events "
+			+ "shorter than `thresholdMs` are never recorded, so an empty low end below the threshold is expected "
+			+ "and every recorded event is already at least that long. If a histogram is absent, check "
+			+ "`durationHistograms.eventAvailability`: that is missing data, not evidence against this label.";
+
+	/**
+	 * Appended to a question that uses {@code timeSeries}.
+	 */
+	private static final String TIME_SERIES_NOTE = "Each `timeSeries.series` entry has one value per time slice "
+			+ "(`timeSeries.sliceCount` slices of `timeSeries.sliceSeconds` each, oldest first); a null is a slice "
+			+ "without a sample, not a zero. A series that is absent had no events - check "
+			+ "`timeSeries.eventAvailability` - which is missing data, not evidence against this label.";
 
 	@Inject
 	RecordingService recordings;
@@ -148,9 +169,9 @@ public class JudgmentTools {
 	}
 
 	@Tool(description = "Judges the workload profile of the recorded application - whether it looks throughput "
-			+ "oriented, pause-time sensitive, memory constrained, allocation heavy, cpu bound, and/or still "
-			+ "warming up (JVM startup, not yet in steady state) - from GC, allocation, CPU, class loading and "
-			+ "compilation metrics computed from the recording. These are not mutually exclusive: a workload can "
+			+ "oriented, pause-time sensitive, memory constrained, allocation heavy, cpu bound, lock contended, "
+			+ "and/or still warming up (JVM startup, not yet in steady state) - from GC, allocation, CPU, lock, "
+			+ "class loading, compilation, memory and container metrics computed from the recording. These are not mutually exclusive: a workload can "
 			+ "be more than one at once. Requires the JEV_KEY environment variable to be set.")
 	String classifyWorkloadProfile(
 		@ToolArg(description = "The recordingId from loadRecording. Leave empty when only one recording is loaded.", required = false)
@@ -165,49 +186,76 @@ public class JudgmentTools {
 			Recording recording = recordings.get(recordingId);
 			WorkloadMetrics metrics = WorkloadMetrics.compute(recording.getItems(), recording.getStart(),
 					recording.getEnd());
-			WarmupMetrics warmup = WarmupMetrics.compute(recording.getItems(), recording.getStart(),
-					recording.getEnd());
-			int maxNodes = HotPathMetrics.clampMaxNodes(maxHotPathNodes);
-
-			Map<String, Object> state = new LinkedHashMap<>();
-			state.put("metrics", metrics.toStateMap());
-			state.put("warmup", warmup.toStateMap());
-			Map<String, Object> executionHotPath = HotPathMetrics.computeExecutionHotPath(recording.getItems(),
-					maxNodes);
-			if (executionHotPath != null) {
-				state.put("executionHotPath", executionHotPath);
-			}
-			Map<String, Object> allocationHotPath = HotPathMetrics.computeAllocationHotPath(recording.getItems(),
-					maxNodes);
-			if (allocationHotPath != null) {
-				state.put("allocationHotPath", allocationHotPath);
-			}
+			Map<String, Object> state = workloadState(recording, metrics,
+					HotPathMetrics.clampMaxNodes(maxHotPathNodes));
 
 			Map<String, Object> questions = new LinkedHashMap<>();
-			questions.put("throughputOriented",
-					noulQuestion(
-							"Does this JVM workload look throughput oriented, i.e. optimized to maximize total work "
-									+ "done over time rather than to keep individual pauses short? "
-									+ EVENT_AVAILABILITY_NOTE));
-			questions.put("pauseTimeSensitive",
-					noulQuestion(
-							"Does this JVM workload look pause-time sensitive, i.e. would it be significantly harmed "
-									+ "by long or frequent GC pauses? " + EVENT_AVAILABILITY_NOTE));
+			questions.put("throughputOriented", noulQuestion(
+					"Does this JVM workload look throughput oriented, i.e. optimized to maximize total work "
+							+ "done over time rather than to keep individual pauses short? `environment.gc` names the "
+							+ "collectors in use - a throughput collector such as Parallel is a deliberate choice that "
+							+ "points this way, while a low-pause collector such as ZGC or Shenandoah points away. "
+							+ EVENT_AVAILABILITY_NOTE));
+			questions.put("pauseTimeSensitive", noulQuestion(
+					"Does this JVM workload look pause-time sensitive, i.e. would it be significantly harmed "
+							+ "by long or frequent GC or safepoint pauses? If present, `durationHistograms.gcPause` "
+							+ "shows how individual GC pauses are distributed - a long tail there matters more for "
+							+ "latency than the average. `durationHistograms.safepointBegin` is the time it took to "
+							+ "bring all threads to a safepoint (time-to-safepoint), and `durationHistograms.vmOperation` "
+							+ "the time spent in VM operations while stopped, with `topOperations` naming which "
+							+ "(GC operations show up there too, so do not double count them against `gcPause`). "
+							+ HISTOGRAM_NOTE + " " + EVENT_AVAILABILITY_NOTE));
 			questions.put("memoryConstrained", noulQuestion(
 					"Does this JVM workload look memory constrained, i.e. running close to the limits of its "
-							+ "configured heap given its GC frequency and pause overhead? " + EVENT_AVAILABILITY_NOTE));
+							+ "configured heap or of the memory available to the process? Compare "
+							+ "`timeSeries.series.heapUsedAfterGcMb` (the live set left after each GC) with "
+							+ "`environment.memory.maxHeapMb`: a live set that stays close to the max heap, or keeps "
+							+ "growing towards it, is the main signal, together with GC frequency and pause overhead. "
+							+ "Also compare `timeSeries.series.rssMb` (and `containerMemoryUsageMb`) with "
+							+ "`environment.container.memoryLimitMb` or `environment.memory.physicalMemoryTotalMb` - "
+							+ "the process can run out of memory outside the heap. "
+							+ "A non-zero `environment.container.memoryFailCountIncrease` means the container hit "
+							+ "its memory limit during the recording. " + TIME_SERIES_NOTE + " "
+							+ EVENT_AVAILABILITY_NOTE));
 			questions.put("allocationHeavy",
 					noulQuestion("Does this JVM workload look allocation heavy, i.e. allocating objects at a high rate "
 							+ "relative to its GC activity? If present, `allocationHotPath` is the pruned call graph "
 							+ "for where allocations are coming from - a small number of dominant sites there "
-							+ "reinforces this label more than the same total rate spread evenly. " + HOT_PATH_NOTE
-							+ " " + EVENT_AVAILABILITY_NOTE));
+							+ "reinforces this label more than the same total rate spread evenly. "
+							+ "`timeSeries.series.allocationMbPerSec` shows whether the rate is sustained or bursty. "
+							+ HOT_PATH_NOTE + " " + TIME_SERIES_NOTE + " " + EVENT_AVAILABILITY_NOTE));
 			questions.put("cpuBound",
 					noulQuestion("Does this JVM workload look cpu bound, i.e. running at consistently high CPU load? "
+							+ "Judge the load against the CPU actually available: `environment.container.cpuLimitCores` "
+							+ "(when present, the container's CPU quota) and `environment.cpu.hwThreads`. "
+							+ "`timeSeries.series.jvmTotalCpuPct` and `machineTotalCpuPct` show whether the load is "
+							+ "sustained and how much of the machine's load is this JVM rather than something else; "
+							+ "`containerCpuUsageCores` and `containerCpuThrottledPct` (and "
+							+ "`environment.container.cpuThrottledPctDuringRecording`) show a container using up its "
+							+ "quota - throttling is strong evidence even when the CPU percentages look moderate. "
 							+ "If present, `executionHotPath` is the pruned call graph for where CPU time is spent - "
 							+ "use it to judge whether the load looks like real application work rather than, e.g., "
-							+ "GC or JIT compilation dominating the samples. " + HOT_PATH_NOTE + " "
-							+ EVENT_AVAILABILITY_NOTE));
+							+ "GC or JIT compilation dominating the samples. " + HOT_PATH_NOTE + " " + TIME_SERIES_NOTE
+							+ " " + EVENT_AVAILABILITY_NOTE));
+			questions.put("lockContended",
+					noulQuestion("Does this JVM workload look lock contended, i.e. are threads losing significant time "
+							+ "blocking on Java monitors or other locks? Use `durationHistograms.monitorEnter` "
+							+ "(threads blocked entering a contended synchronized block/method) as the primary "
+							+ "signal: weigh `count` and `totalDurationMs` against the recording duration "
+							+ "(`metrics.durationSeconds`) and the thread count (`timeSeries.series.activeThreads`), "
+							+ "and look at how far the tail reaches. `lockContention.monitorEnter` lists the monitor "
+							+ "classes threads blocked on - one class taking most of the time is a hot lock, and a "
+							+ "low `distinctAddresses` suggests a single instance (it is an upper bound on instances, "
+							+ "since a moving GC or monitor deflation gives the same lock a new address) - and "
+							+ "`monitorEnterHotPath` is the "
+							+ "pruned call graph of where they were entered, weighted by blocked milliseconds. "
+							+ "`durationHistograms.threadPark` covers java.util.concurrent locks, but also idle "
+							+ "worker threads parked waiting for tasks: use `lockContention.threadPark` to tell them "
+							+ "apart - lock classes such as ReentrantLock$NonfairSync or "
+							+ "ReentrantReadWriteLock$NonfairSync are contention, while queue or pool conditions "
+							+ "(e.g. AbstractQueuedSynchronizer$ConditionObject, SynchronousQueue, ForkJoinPool) "
+							+ "are usually idle threads and not evidence for this label. " + HISTOGRAM_NOTE + " "
+							+ HOT_PATH_NOTE + " " + EVENT_AVAILABILITY_NOTE));
 			questions.put("stillWarmingUp", noulQuestion(
 					"Does this recording capture a JVM/process that is still warming up, i.e. recently started "
 							+ "and not yet in steady state, rather than a JVM that has been running under stable "
@@ -218,7 +266,10 @@ public class JudgmentTools {
 							+ "recording began or ended) against `warmup.classLoadRatePerSecond` (elevated class "
 							+ "loading is typical during startup as classes are loaded on first use) and "
 							+ "`warmup.threadStartCount` (many new threads starting suggests subsystems are still "
-							+ "being initialized). " + EVENT_AVAILABILITY_NOTE));
+							+ "being initialized). `timeSeries.series.loadedClassCount` still climbing at the end of "
+							+ "the recording, or a CPU load or `heapUsedAfterGcMb` that only levels out partway "
+							+ "through, point the same way; flat series point to steady state. " + TIME_SERIES_NOTE
+							+ " " + EVENT_AVAILABILITY_NOTE));
 
 			Map<String, Object> request = new LinkedHashMap<>();
 			request.put("state", state);
@@ -241,6 +292,28 @@ public class JudgmentTools {
 		} catch (Exception e) {
 			return "Error: " + JfrToolkit.describeError(e);
 		}
+	}
+
+	/**
+	 * Everything Jev gets to see for classifyWorkloadProfile, assembled up front since Jev cannot
+	 * ask for more.
+	 */
+	static Map<String, Object> workloadState(Recording recording, WorkloadMetrics metrics, int maxHotPathNodes) {
+		IItemCollection items = recording.getItems();
+		Map<String, Object> state = new LinkedHashMap<>();
+		state.put("metrics", metrics.toStateMap());
+		state.put("warmup", WarmupMetrics.compute(items, recording.getStart(), recording.getEnd()).toStateMap());
+		state.put("environment", EnvironmentMetrics.compute(items));
+		Map<String, Object> timeSeries = TimeSeriesMetrics.compute(items, recording.getStart(), recording.getEnd());
+		if (timeSeries != null) {
+			state.put("timeSeries", timeSeries);
+		}
+		putIfPresent(state, "executionHotPath", HotPathMetrics.computeExecutionHotPath(items, maxHotPathNodes));
+		putIfPresent(state, "allocationHotPath", HotPathMetrics.computeAllocationHotPath(items, maxHotPathNodes));
+		putIfPresent(state, "monitorEnterHotPath", HotPathMetrics.computeMonitorEnterHotPath(items, maxHotPathNodes));
+		state.put("durationHistograms", DurationHistograms.compute(items));
+		state.put("lockContention", LockContention.compute(items));
+		return state;
 	}
 
 	/**
@@ -311,6 +384,12 @@ public class JudgmentTools {
 
 	private static void putIfPresent(Map<String, Object> map, String key, String value) {
 		if (value != null && !value.isEmpty()) {
+			map.put(key, value);
+		}
+	}
+
+	private static void putIfPresent(Map<String, Object> map, String key, Map<String, Object> value) {
+		if (value != null) {
 			map.put(key, value);
 		}
 	}
