@@ -92,16 +92,18 @@ public class RuleAnalysisTools {
 	static final class TriggeredRule {
 		final String id;
 		final String name;
+		final String topic;
 		final Severity severity;
 		final Double score;
 		final String summary;
 		final String explanation;
 		final String solution;
 
-		TriggeredRule(String id, String name, Severity severity, Double score, String summary, String explanation,
-				String solution) {
+		TriggeredRule(String id, String name, String topic, Severity severity, Double score, String summary,
+				String explanation, String solution) {
 			this.id = id;
 			this.name = name;
+			this.topic = topic;
 			this.severity = severity;
 			this.score = score;
 			this.summary = summary;
@@ -134,9 +136,9 @@ public class RuleAnalysisTools {
 			}
 			IQuantity scoreQuantity = result.getResult(TypedResult.SCORE);
 			Double score = scoreQuantity != null ? scoreQuantity.doubleValueIn(scoreQuantity.getUnit()) : null;
-			triggered.add(new TriggeredRule(result.getRule().getId(), result.getRule().getName(), result.getSeverity(),
-					score, populate(result, result.getSummary()), populate(result, result.getExplanation()),
-					populate(result, result.getSolution())));
+			triggered.add(new TriggeredRule(result.getRule().getId(), result.getRule().getName(),
+					result.getRule().getTopic(), result.getSeverity(), score, populate(result, result.getSummary()),
+					populate(result, result.getExplanation()), populate(result, result.getSolution())));
 		}
 		return triggered;
 	}

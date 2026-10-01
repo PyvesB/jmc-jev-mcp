@@ -12,6 +12,8 @@ import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 
 import org.junit.jupiter.api.Test;
+import org.openjdk.jmc.flightrecorder.rules.IRule;
+import org.openjdk.jmc.flightrecorder.rules.RuleRegistry;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 
 /**
@@ -43,6 +45,16 @@ class JudgmentToolsLiveTest {
 		for (String label : new String[] {"throughputOriented", "pauseTimeSensitive", "memoryConstrained",
 				"allocationHeavy", "cpuBound", "lockContended", "stillWarmingUp"}) {
 			assertTrue(result.contains(label), "Missing " + label + " in:\n" + result);
+		}
+	}
+
+	@Test
+	void assessRuleResultsLabelsEveryRule() throws Exception {
+		recordings.load(TestRecordings.wldf().getAbsolutePath());
+		String result = judgmentTools.assessRuleResults("", null);
+		assertFalse(result.startsWith("Error:"), result);
+		for (IRule rule : RuleRegistry.getRules()) {
+			assertTrue(result.contains("[" + rule.getId() + "]: JMC "), "Missing " + rule.getId() + " in:\n" + result);
 		}
 	}
 }
