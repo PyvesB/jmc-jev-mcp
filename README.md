@@ -7,92 +7,78 @@
 [![GraalVM Native](https://img.shields.io/badge/GraalVM-native--image-orange)](https://www.graalvm.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green)](https://opensource.org/licenses/MIT)
 
-An MCP server for JDK Flight Recorder (JFR) recordings that goes one step past listing findings:
-it uses [TypeSafe's Jev model](https://typesafe.ai) to judge them.
+Ask your AI assistant what is wrong with a Java application, and get an answer grounded in a
+JDK Flight Recorder (JFR) recording.
 
-- `getRuleResults` runs JMC's built-in automated analysis rules (the same engine JDK Mission
-  Control uses) against a loaded recording and reports every triggered finding.
-- `classifyBiggestIssue` asks Jev which of those findings is the dominant root cause, optionally
-  weighted by a symptom you describe.
-- `classifyWorkloadProfile` computes metrics, histograms, time series and pruned call graphs from
-  the recording and asks Jev whether the workload looks throughput oriented, pause-time
-  sensitive, memory constrained, allocation heavy, cpu bound, lock contended, and/or still
-  warming up - these are independent judgments, not mutually exclusive.
-- `assessRuleResults` sends all of JMC's rule results together with that same data, and asks Jev,
-  for every rule, how likely a high-severity finding from it would be correct - flagging warnings
-  the data does not support, and problems the data shows that JMC rated lower.
+jmc-jev-mcp is an [MCP](https://modelcontextprotocol.io) server that gives assistants such as
+Claude Code the automated analysis of JDK Mission Control (JMC), and goes one step further: it
+uses [TypeSafe's Jev model](https://typesafe.ai) to judge the findings, instead of just listing
+them.
 
-Built with [Quarkus](https://quarkus.io) and the
-[`quarkus-mcp-server-stdio`](https://github.com/quarkiverse/quarkus-mcp-server) extension,
-compiled to a GraalVM native image for fast STDIO startup. Depends on the published
-`org.openjdk.jmc` core artifacts (no local JMC build required).
+## What you get
 
-## Tools
+- **JMC's automated analysis, from your assistant.** The same rules JDK Mission Control runs on a
+  recording - GC, allocation, locking, I/O, threads, JIT, configuration and more - with their
+  findings, explanations and suggested fixes.
+- **The biggest issue, picked for you.** Instead of a long list of warnings, Jev judges which
+  finding is the dominant root cause, optionally weighed against a symptom you describe, such as
+  "high tail latency under load".
+- **A workload profile.** Jev judges whether the application looks throughput oriented,
+  pause-time sensitive, memory constrained, allocation heavy, CPU bound, lock contended, and
+  whether it was still warming up when the recording was made. Each is a separate
+  likely/possible/unlikely judgment with a probability, since a workload can be several of
+  these at once.
+- **A second opinion on JMC's rules.** For every rule, Jev estimates how likely it is that the
+  problem the rule looks for is significant, given the data in the recording, and points out where
+  it disagrees with JMC: warnings the data does not support, and problems the data shows that JMC
+  rated lower.
 
-| Tool | Needs `JEV_KEY` | What it does |
-|------|:---:|------|
-| `loadRecording` | | Loads a `.jfr` file by absolute path and returns its `recordingId`. Call this first. |
-| `listRecordings` | | Lists the loaded recordings. |
-| `getRecordingInfo` | | Event count, event type count and duration of a recording. |
-| `unloadRecording` | | Frees a recording and its cached rule results. |
-| `getRuleResults` | | JMC's automated analysis findings, filtered by minimum severity. |
-| `classifyBiggestIssue` | yes | Jev's pick of the dominant finding, with confidence and per-finding probabilities. |
-| `classifyWorkloadProfile` | yes | Jev's likely/possible/unlikely judgment for each workload label. |
-| `assessRuleResults` | yes | Jev's estimate, per rule, of how likely a high-severity finding would be correct. |
-| `getVersion` | | The server version. |
+The judgments are based on metrics, histograms, time series and call graphs computed from the
+recording - not just on the rule texts. See [How it works](docs/how-it-works.md) for what is
+computed and sent.
 
-Apart from `unloadRecording`, the `recordingId` argument can be left empty when only one
-recording is loaded.
+## Getting started
 
-### What `classifyWorkloadProfile` sends to Jev
+### 1. Download
 
-Jev cannot call back into the server, so everything it gets to see is assembled up front and sent
-in a single request (typically a few tens of KB):
+Get a native binary for your platform from the
+[latest release](https://github.com/thegreystone/jmc-jev-mcp/releases/latest):
 
-- **Metrics** - GC count, pause overhead and max pause, allocation rate, average CPU load.
-- **Warm-up** - JVM uptime at the start and end of the recording, class loading and thread start
-  rates.
-- **Environment** - CPU count, heap size, collectors, physical memory, RSS peak and, when the JVM
-  runs in a container, its CPU quota, memory limits, CPU throttling and memory-limit hits.
-- **Time series** - the series JMC charts on its Java Application and Heap pages (CPU, threads,
-  RSS, heap, physical memory, allocation, GC pauses), plus heap used after GC, loaded classes and
-  container usage, downsampled into 20 slices of the recording.
-- **Duration histograms** - for monitor enter, thread park, GC pauses, time-to-safepoint and VM
-  operations at safepoints. Backed by HdrHistogram like JMC's own percentile tables, with
-  log-scale buckets, percentiles, and the recording threshold that cuts off the low end.
-- **Lock contention** - monitor classes and park blockers ranked by total blocked time, which
-  tells real lock contention apart from idle pool threads waiting for work.
-- **Hot paths** - call graphs for execution samples, allocations and monitor enters, cut down with
-  JMC's own entropy-based pruning so caller/callee structure survives. The `maxHotPathNodes`
-  argument sets the node budget per graph (default 80, capped at 500).
+| Platform | File |
+|----------|------|
+| macOS (Apple silicon) | `jmc-jev-mcp-<version>-macos-aarch64` |
+| Linux (x86_64) | `jmc-jev-mcp-<version>-linux-x86_64` |
+| Linux (aarch64) | `jmc-jev-mcp-<version>-linux-aarch64` |
+| Windows (x86_64) | `jmc-jev-mcp-<version>-windows-x86_64.exe` |
+| Any platform with Java 21+ | `jmc-jev-mcp-<version>-runner.jar` |
 
-Jev limits how large the state of a request may be. If the state does not fit, the hot-path
-graphs - by far its largest part - are pruned further, and the tool output says so.
-`assessRuleResults` additionally sends every rule's result, with the full explanation and solution
-text for INFO and WARNING results.
+On macOS and Linux, make the binary executable. On macOS, also clear the quarantine flag the
+browser sets on downloads, or the system will refuse to run it:
 
-Each section also reports which of its event types were enabled in the recording, so that a
-metric that is zero because its event was disabled is treated as missing data rather than as
-evidence.
+```
+chmod +x jmc-jev-mcp-<version>-macos-aarch64
+xattr -d com.apple.quarantine jmc-jev-mcp-<version>-macos-aarch64
+```
 
-## Installation
+### 2. Get a TypeSafe API key
 
-Download a native binary for your platform, or the platform-independent uber-jar, from the
-[latest release](https://github.com/thegreystone/jmc-jev-mcp/releases/latest). The uber-jar
-needs Java 21 or later.
+The Jev-backed tools need an API key from [TypeSafe](https://typesafe.ai), provided in the
+`JEV_KEY` environment variable. Without it, you can still load recordings and get JMC's rule
+results; only the Jev judgments are unavailable.
 
-Jev-backed tools require a TypeSafe API key in the `JEV_KEY` environment variable. Every other
-tool works without it. The key is read when a tool is called, so it has to be set in the
-environment the MCP client starts the server in.
+### 3. Add the server to your assistant
 
 With Claude Code:
 
 ```
 export JEV_KEY=...
 claude mcp add jmc-jev -- /path/to/jmc-jev-mcp-<version>-macos-aarch64
-# or
+# or, with the jar
 claude mcp add jmc-jev -- java -jar /path/to/jmc-jev-mcp-<version>-runner.jar
 ```
+
+The key is read from the environment the assistant starts the server in, so export it before
+starting Claude Code.
 
 With any other MCP client that takes a JSON server configuration:
 
@@ -107,53 +93,60 @@ With any other MCP client that takes a JSON server configuration:
 }
 ```
 
-Then ask the client to load a recording and classify it, e.g. "Load /tmp/app.jfr and tell me
-what kind of workload it is, and what the biggest problem is."
+### 4. Ask about a recording
 
-The server talks MCP over STDIO, so stdout is reserved for the protocol. Logs go to
-`jmc-jev-mcp-server.log` in the server's working directory.
+Point the assistant at a `.jfr` file by its absolute path, for example:
 
-## Building
+- "Load /tmp/app.jfr and tell me what the biggest problem is."
+- "What kind of workload is in /tmp/app.jfr? Is it still warming up?"
+- "Users complain about latency spikes. What in /tmp/app.jfr could explain that?"
+- "Which of JMC's warnings for this recording should I actually believe?"
 
-```
-mvn package                      # uber-jar at target/jmc-jev-mcp-0.1.0-SNAPSHOT-runner.jar
-JAVA_HOME=<graalvm> mvn package -Dnative -DskipTests   # native binary
-```
+Don't have a recording yet? Start your application with
+`-XX:StartFlightRecording:duration=60s,filename=/tmp/app.jfr,settings=profile`, or record a
+running one with `jcmd <pid> JFR.start duration=60s filename=/tmp/app.jfr settings=profile`.
+The `profile` settings record more of the events the analysis uses than the `default` ones.
 
-The build enforces formatting with Spotless (tabs, 120 columns); `mvn spotless:apply` fixes it.
+## Tools
 
-## Testing
+The assistant picks the right tool from your question; this is what it has to work with.
 
-```
-mvn test
-```
+| Tool | Needs `JEV_KEY` | What it does |
+|------|:---:|------|
+| `loadRecording` | | Loads a `.jfr` file by absolute path. |
+| `listRecordings` | | Lists the loaded recordings. |
+| `getRecordingInfo` | | Event count, event type count and duration of a recording. |
+| `unloadRecording` | | Frees a recording and its cached results. |
+| `getRuleResults` | | JMC's automated analysis findings, filtered by minimum severity. |
+| `classifyBiggestIssue` | yes | Jev's pick of the dominant finding, with per-finding probabilities. |
+| `classifyWorkloadProfile` | yes | Jev's likely/possible/unlikely judgment for each workload label. |
+| `assessRuleResults` | yes | Jev's estimate, per rule, of how likely the problem a rule looks for is significant. |
+| `getVersion` | | The server version. |
 
-- Most tests run against `src/test/resources/recordings/wldf.jfr`, a real WebLogic recording.
-- `JudgmentToolsLiveTest` calls Jev and is skipped unless `JEV_KEY` is set. The fail-fast tests in
-  `JudgmentToolsTest` check the opposite case and are skipped when it is set.
-- Container metrics are tested against `container-synthetic.jfr`, a small recording of synthetic
-  events with the same field layout as the JDK's container events. To regenerate it, run
-  `SyntheticContainerRecording` on a JVM that is not containerized (e.g. on macOS) - see its
-  Javadoc.
-- `NativeImageSanityIT` starts a native binary and checks that it answers an MCP `tools/list`
-  request. It is skipped unless `native.image.path` points to a binary:
+## What leaves your machine
 
-  ```
-  mvn verify -Dnative -Dnative.image.path=target/jmc-jev-mcp-0.1.0-SNAPSHOT-runner
-  ```
+Recordings are parsed and analyzed locally. Only the Jev-backed tools send anything over the
+network: a summary of the recording to TypeSafe's API. That summary contains computed metrics
+and JMC's rule results, but also class and method names from the hottest call paths, lock class
+names, and whatever the rule results quote from the recording. Don't use the Jev-backed tools on
+recordings whose code structure you are not allowed to share with TypeSafe.
 
-## Releasing
+The recording itself comes from the profiled application and is treated as untrusted: its
+contents are only ever given to Jev as evidence to judge, never as instructions.
 
-Pushing a `v*` tag runs the release workflow, which builds the uber-jar and native binaries for
-Linux (x86_64, aarch64), macOS (aarch64) and Windows (x86_64), runs the native sanity test on
-each, and attaches them all to a GitHub release.
+## Troubleshooting
 
-## Security note
+- **"The JEV_KEY environment variable is not set"** - the key was not in the environment the
+  assistant started the server in. Set it in the client's server configuration (`env` above), or
+  export it and restart the client.
+- **Anything else** - the server logs to `jmc-jev-mcp-server.log` in its working directory.
+  Nothing is printed to the console, since the server talks to the assistant over stdout.
 
-Event data inside a JFR recording (thread names, class names, stack frames, log messages) comes
-from the profiled application and is untrusted. Tool descriptions call this out explicitly, and
-Jev is only ever shown JMC's own structured findings and computed metrics as evidence to judge -
-never asked to follow instructions found inside recording data.
+## More documentation
+
+- [How it works](docs/how-it-works.md) - what is computed from a recording and sent to Jev.
+- [Model choices](docs/model-choices.md) - why Jev, and why not the open Laya model for now.
+- [Development](docs/development.md) - building, testing and releasing.
 
 ## License
 

@@ -129,7 +129,10 @@ class JudgmentToolsTest {
 		Map<String, Object> state = (Map<String, Object>) request.get("state");
 		assertTrue(state.containsKey("ruleResults"));
 		assertTrue(JudgmentTools.sizeOf(state) <= JudgmentTools.STATE_BUDGET_BYTES);
-		assertEquals(rules.size(), ((Map<?, ?>) request.get("questions")).size());
+		long findings = rules.stream()
+				.filter(rule -> rule.severity == Severity.INFO || rule.severity == Severity.WARNING).count();
+		assertTrue(findings > 0);
+		assertEquals(rules.size() + findings, ((Map<?, ?>) request.get("questions")).size());
 	}
 
 	/**
