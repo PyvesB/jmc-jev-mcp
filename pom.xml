@@ -201,5 +201,12 @@
 				<quarkus.native.enabled>true</quarkus.native.enabled>
 			</properties>
 		</profile>
+		<!-- `mvn test -Pdemo` prints every Jev classification of wldf.jfr. Requires JEV_KEY. -->
+		<profile>
+			<id>demo</id>
+			<properties>
+				<test>JevDemo</test>
+			</properties>
+		</profile>
 	</profiles>
 </project>

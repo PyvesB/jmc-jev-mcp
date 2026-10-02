@@ -31,6 +31,15 @@ mvn test
   mvn verify -Dnative -Dnative.image.path=target/jmc-jev-mcp-0.1.0-SNAPSHOT-runner
   ```
 
+## Demoing
+
+```
+scripts/demo.sh                  # or: mvn -q test -Pdemo
+```
+
+Runs `classifyBiggestIssue`, `classifyWorkloadProfile` and `assessRuleResults` against `wldf.jfr`
+and prints the results. Requires `JEV_KEY`.
+
 ## Releasing
 
 Pushing a `v*` tag runs the release workflow, which builds the uber-jar and native binaries for
