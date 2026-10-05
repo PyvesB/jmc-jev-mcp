@@ -1,6 +1,6 @@
 # jmc-jev-mcp
 
-[![Build](https://github.com/thegreystone/jmc-jev-mcp/actions/workflows/build.yml/badge.svg)](https://github.com/thegreystone/jmc-jev-mcp/actions/workflows/build.yml)
+[![Build](https://img.shields.io/github/actions/workflow/status/thegreystone/jmc-jev-mcp/build.yml)](https://github.com/thegreystone/jmc-jev-mcp/actions/workflows/build.yml)
 [![Release](https://img.shields.io/github/v/release/thegreystone/jmc-jev-mcp)](https://github.com/thegreystone/jmc-jev-mcp/releases/latest)
 [![Java 21+](https://img.shields.io/badge/Java-21%2B-blue)](https://adoptium.net/)
 [![Quarkus](https://img.shields.io/badge/Quarkus-3.38-blueviolet)](https://quarkus.io/)
